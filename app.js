@@ -120,7 +120,7 @@ const FD = (() => {
   function watchStatus(watch) {
     if (watch.last_seen_price == null) return "unchanged";
     if (watch.target_price != null && watch.last_seen_price <= watch.target_price) return "below-target";
-    if (watch.lowest_seen_price != null && watch.last_seen_price <= watch.lowest_seen_price) return "dropped";
+    if (watch.previous_price != null && watch.last_seen_price < watch.previous_price) return "dropped";
     if (watch.target_price != null && watch.last_seen_price > watch.target_price) return "above-target";
     return "unchanged";
   }
