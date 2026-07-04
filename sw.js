@@ -1,14 +1,5 @@
-const CACHE_NAME = "flightdrop-v1";
-const APP_SHELL = [
-  "/",
-  "/index.html",
-  "/add.html",
-  "/watch.html",
-  "/settings.html",
-  "/styles.css",
-  "/app.js",
-  "/manifest.json",
-];
+const CACHE_NAME = "flightdrop-v2";
+const APP_SHELL = ["/styles.css", "/app.js", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -26,22 +17,33 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Network-first for API calls, cache-first for the app shell.
+// Cache-first for static assets (CSS/JS/manifest) only. Page navigations
+// (clicking a link, typing a URL, following a redirect) are deliberately
+// NOT intercepted here - `return` with no respondWith() lets the browser
+// handle them exactly like a normal page load. Intercepting navigation
+// requests is what caused "This site can't be reached" on in-app link
+// clicks: a service worker can't safely respondWith() certain redirected/
+// edge-case responses for a top-level navigation, and any code path that
+// resolves to something other than a real Response breaks the whole load.
+// Skipping navigation entirely sidesteps that class of bug completely.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith("/api/")) return; // never cache API responses
+  if (event.request.mode === "navigate") return; // let the browser load pages normally
+  if (event.request.method !== "GET") return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const fetchPromise = fetch(event.request)
         .then((response) => {
-          if (response && response.status === 200 && event.request.method === "GET") {
+          if (response && response.status === 200) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
           return response;
         })
-        .catch(() => cached);
+        // Always resolve to a real Response, even offline with nothing cached.
+        .catch(() => cached || Response.error());
       return cached || fetchPromise;
     })
   );
