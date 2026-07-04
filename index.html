@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0B1220" />
+<title>FlightDrop — Dashboard</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="wordmark">Flight<span>Drop</span></div>
+    <div class="subline">Departures board for your fares</div>
+  </div>
+</header>
+
+<main>
+  <div id="unmatched-banner"></div>
+  <div class="section-label">Active watches</div>
+  <div id="watch-list">
+    <div class="empty-state">
+      <div class="flap">···</div>
+      <p>Loading your watches…</p>
+    </div>
+  </div>
+</main>
+
+<nav class="bottom-nav">
+  <a href="/index.html" data-page="index.html"><span class="icon">▣</span>Dashboard</a>
+  <a href="/add.html" data-page="add.html"><span class="icon">＋</span>Add Watch</a>
+  <a href="/settings.html" data-page="settings.html"><span class="icon">⚙</span>Settings</a>
+</nav>
+
+<script src="/app.js"></script>
+<script>
+async function loadWatches() {
+  const list = document.getElementById("watch-list");
+  if (!FD.apiBase()) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="flap">SET</div>
+        <h2>Connect your API</h2>
+        <p>Add your Worker URL in Settings so the dashboard can load your watches.</p>
+        <a class="btn btn-primary" href="/settings.html">Go to Settings</a>
+      </div>`;
+    return;
+  }
+
+  try {
+    const [watches, unmatched] = await Promise.all([
+      FD.api("/api/watches"),
+      FD.api("/api/price-events/unmatched").catch(() => []),
+    ]);
+
+    renderUnmatchedBanner(unmatched);
+
+    if (!watches || watches.length === 0) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="flap">···</div>
+          <h2>No watches yet</h2>
+          <p>Add a flight watch, set the matching alert in Google Flights, then forward those emails to FlightDrop.</p>
+          <a class="btn btn-primary" href="/add.html">Add your first watch</a>
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = "";
+    watches.forEach((watch) => list.appendChild(renderWatchCard(watch)));
+  } catch (err) {
+    list.innerHTML = `<div class="empty-state"><h2>Couldn't load watches</h2><p>${FD.escapeHtml(err.message)}</p></div>`;
+  }
+}
+
+function renderUnmatchedBanner(unmatched) {
+  const el = document.getElementById("unmatched-banner");
+  if (!unmatched || unmatched.length === 0) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div class="card" style="border-color: rgba(255,107,94,0.4);">
+      <strong style="color: var(--coral); font-size: 13px;">${unmatched.length} email${unmatched.length > 1 ? "s" : ""} couldn't be matched</strong>
+      <p style="font-size: 12px; color: var(--ink-2); margin: 6px 0 10px;">Link them to a watch manually from Settings → Unmatched emails.</p>
+      <a class="btn btn-secondary btn-sm" href="/settings.html#unmatched">Review unmatched</a>
+    </div>`;
+}
+
+function renderWatchCard(watch) {
+  const status = FD.watchStatus(watch);
+  const a = document.createElement("a");
+  a.href = `/watch.html?id=${watch.id}`;
+  a.className = "card watch-card";
+  a.dataset.status = status;
+
+  const legs = (watch.legs || []).map((l) => `${FD.escapeHtml(l.from) || "?"} → ${FD.escapeHtml(l.to) || "?"}`).join(" · ") || FD.escapeHtml(watch.route_type);
+
+  const priceBlock = document.createElement("div");
+  priceBlock.className = "price-block";
+  priceBlock.appendChild(FD.renderFlap(FD.formatMoney(watch.last_seen_price, watch.currency)));
+  const target = document.createElement("div");
+  target.className = "target";
+  target.textContent = watch.target_price != null ? `Target ${FD.formatMoney(watch.target_price, watch.currency)}` : "No target set";
+  priceBlock.appendChild(target);
+
+  a.innerHTML = `
+    <div class="row-top">
+      <div>
+        <div class="name">${FD.escapeHtml(watch.name)}</div>
+        <div class="route">${legs}</div>
+      </div>
+    </div>
+    <span class="status-pill">${FD.statusLabel(status)}</span>
+  `;
+  a.querySelector(".row-top").appendChild(priceBlock);
+  return a;
+}
+
+loadWatches();
+</script>
+</body>
+</html>

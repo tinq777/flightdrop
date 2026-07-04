@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0B1220" />
+<title>FlightDrop — Settings</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="wordmark">Settings</div>
+    <div class="subline">Connect, notify, and set up email forwarding</div>
+  </div>
+</header>
+
+<main>
+  <div class="section-label" style="margin-top:0;">Worker API</div>
+  <div class="card">
+    <div class="field">
+      <label for="apiBase">Worker URL</label>
+      <input type="text" id="apiBase" placeholder="https://flightdrop-worker.yourname.workers.dev" />
+    </div>
+    <button class="btn btn-primary" id="save-api">Save</button>
+  </div>
+
+  <div class="section-label">Notifications</div>
+  <div class="card">
+    <p style="font-size:13px; color:var(--ink-1); margin-top:0;">On iPhone: add FlightDrop to your Home Screen (Share → Add to Home Screen), open it from there, then enable notifications below. Safari doesn't support push for tabs — only for installed Home Screen apps.</p>
+    <button class="btn btn-secondary" id="enable-push">Enable push notifications</button>
+    <div style="height:10px;"></div>
+    <button class="btn btn-ghost" id="test-push">Send test notification</button>
+    <p id="push-fallback" style="font-size:12px; color:var(--coral); margin-bottom:0; display:none;">
+      Push didn't go through. As a fallback, check the Dashboard directly, or set up an email-to-SMS / IFTTT alert from your Gmail filter as a backup channel.
+    </p>
+  </div>
+
+  <div class="section-label">Inbound email</div>
+  <div class="card">
+    <p style="font-size:13px; color:var(--ink-1); margin-top:0;">Forward Google Flights alert emails to FlightDrop by one of two routes:</p>
+    <p style="font-size:12px; color:var(--ink-2);"><strong>Option A — Cloudflare Email Routing (recommended):</strong> point an address on your own domain (e.g. <code>flights@yourdomain.com</code>) at the FlightDrop Worker. See the README for the one-time dashboard setup.</p>
+    <p style="font-size:12px; color:var(--ink-2);"><strong>Option B — Webhook forward:</strong> use a Gmail filter + a forwarding tool (Zapier, Make, or a Google Apps Script) to POST the email to:</p>
+    <p><code id="inbound-url">/api/email/inbound</code></p>
+
+    <div class="section-label">Gmail filter setup</div>
+    <ol class="steps">
+      <li>Open Gmail → Settings → See all settings → Filters and Blocked Addresses.</li>
+      <li>Click "Create a new filter."</li>
+      <li>In "From," enter <code>googleflights-noreply@google.com</code> (or search "price alert" in Subject).</li>
+      <li>Click "Create filter," then check "Forward it to" and choose your forwarding address or automation.</li>
+      <li>Confirm the forwarding address if Gmail asks you to verify it.</li>
+      <li>Send yourself a test alert or use the <a href="/test.html">test tools page</a> to confirm FlightDrop receives it.</li>
+    </ol>
+  </div>
+
+  <div class="section-label" id="unmatched">Unmatched emails</div>
+  <div class="card" id="unmatched-card">
+    <p style="font-size:13px; color:var(--ink-2); margin:0;">Loading…</p>
+  </div>
+
+  <a class="btn btn-secondary" href="/test.html" style="margin-top:4px;">Open test tools</a>
+</main>
+
+<nav class="bottom-nav">
+  <a href="/index.html" data-page="index.html"><span class="icon">▣</span>Dashboard</a>
+  <a href="/add.html" data-page="add.html"><span class="icon">＋</span>Add Watch</a>
+  <a href="/settings.html" data-page="settings.html"><span class="icon">⚙</span>Settings</a>
+</nav>
+
+<script src="/app.js"></script>
+<script>
+const apiInput = document.getElementById("apiBase");
+apiInput.value = FD.apiBase();
+document.getElementById("inbound-url").textContent = FD.apiBase() ? `${FD.apiBase()}/api/email/inbound` : "/api/email/inbound";
+
+document.getElementById("save-api").addEventListener("click", () => {
+  FD.setApiBase(apiInput.value.trim().replace(/\/$/, ""));
+  FD.toast("Saved", "success");
+  document.getElementById("inbound-url").textContent = `${FD.apiBase()}/api/email/inbound`;
+  loadUnmatched();
+});
+
+document.getElementById("enable-push").addEventListener("click", async () => {
+  try {
+    await FD.enablePush();
+    FD.toast("Push notifications enabled", "success");
+  } catch (err) {
+    FD.toast(err.message, "error");
+    document.getElementById("push-fallback").style.display = "block";
+  }
+});
+
+document.getElementById("test-push").addEventListener("click", async () => {
+  try {
+    const result = await FD.api("/api/push/test", { method: "POST" });
+    FD.toast(`Sent to ${result.sent} device(s)`, "success");
+  } catch (err) {
+    FD.toast(err.message, "error");
+    document.getElementById("push-fallback").style.display = "block";
+  }
+});
+
+async function loadUnmatched() {
+  const card = document.getElementById("unmatched-card");
+  if (!FD.apiBase()) {
+    card.innerHTML = `<p style="font-size:13px; color:var(--ink-2); margin:0;">Connect your Worker URL above to see unmatched emails.</p>`;
+    return;
+  }
+  try {
+    const [events, watches] = await Promise.all([
+      FD.api("/api/price-events/unmatched"),
+      FD.api("/api/watches"),
+    ]);
+    if (!events || events.length === 0) {
+      card.innerHTML = `<p style="font-size:13px; color:var(--ink-2); margin:0;">Nothing to link. Every parsed email matched a watch.</p>`;
+      return;
+    }
+    card.innerHTML = "";
+    events.forEach((ev) => {
+      const row = document.createElement("div");
+      row.style.borderBottom = "1px solid var(--hairline)";
+      row.style.padding = "10px 0";
+      row.innerHTML = `
+        <div style="font-size:13px;">${FD.escapeHtml(ev.source_email_subject) || "(no subject)"}</div>
+        <div style="font-size:11px; color:var(--ink-2); margin:4px 0 8px;">${ev.extracted_price != null ? FD.formatMoney(ev.extracted_price, ev.currency) : "no price found"} · ${new Date(ev.received_at).toLocaleString()}</div>
+        <select class="link-select" style="width:100%; background:var(--panel-800); color:var(--ink-0); border:1px solid var(--hairline); border-radius:6px; padding:8px;">
+          <option value="">Link to watch…</option>
+          ${(watches || []).map((w) => `<option value="${FD.escapeHtml(w.id)}">${FD.escapeHtml(w.name)}</option>`).join("")}
+        </select>
+      `;
+      row.querySelector("select").addEventListener("change", async (e) => {
+        const watchId = e.target.value;
+        if (!watchId) return;
+        try {
+          await FD.api(`/api/price-event/${ev.id}/link`, { method: "POST", body: JSON.stringify({ watchId }) });
+          FD.toast("Linked", "success");
+          loadUnmatched();
+        } catch (err) {
+          FD.toast(err.message, "error");
+        }
+      });
+      card.appendChild(row);
+    });
+  } catch (err) {
+    card.innerHTML = `<p style="font-size:13px; color:var(--coral); margin:0;">${FD.escapeHtml(err.message)}</p>`;
+  }
+}
+
+loadUnmatched();
+</script>
+</body>
+</html>

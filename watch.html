@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0B1220" />
+<title>FlightDrop — Watch Detail</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="wordmark"><span>←</span> <a href="/index.html" style="color:var(--amber)">Back</a></div>
+  </div>
+</header>
+
+<main id="content">
+  <div class="empty-state"><div class="flap">···</div><p>Loading watch…</p></div>
+</main>
+
+<nav class="bottom-nav">
+  <a href="/index.html" data-page="index.html"><span class="icon">▣</span>Dashboard</a>
+  <a href="/add.html" data-page="add.html"><span class="icon">＋</span>Add Watch</a>
+  <a href="/settings.html" data-page="settings.html"><span class="icon">⚙</span>Settings</a>
+</nav>
+
+<script src="/app.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const watchId = params.get("id");
+const content = document.getElementById("content");
+
+function bookingLinks(watch) {
+  const leg = (watch.legs || [])[0] || {};
+  const q = encodeURIComponent(`${leg.from || ""} to ${leg.to || ""}`);
+  return [
+    { label: "Google Flights", url: `https://www.google.com/travel/flights?q=${q}` },
+    { label: "Trip.com", url: `https://www.trip.com/flights/` },
+    { label: "Booking.com", url: `https://www.booking.com/flights/` },
+  ];
+}
+
+async function load() {
+  if (!watchId) {
+    content.innerHTML = `<div class="empty-state"><h2>Missing watch id</h2></div>`;
+    return;
+  }
+  try {
+    const watch = await FD.api(`/api/watch/${watchId}`);
+    render(watch);
+  } catch (err) {
+    content.innerHTML = `<div class="empty-state"><h2>Couldn't load watch</h2><p>${FD.escapeHtml(err.message)}</p></div>`;
+  }
+}
+
+function render(watch) {
+  const status = FD.watchStatus(watch);
+  const legs = (watch.legs || []).map((l) => `${FD.escapeHtml(l.from) || "?"} → ${FD.escapeHtml(l.to) || "?"}`).join(" · ") || FD.escapeHtml(watch.route_type);
+
+  content.innerHTML = `
+    <div class="card watch-card" data-status="${status}">
+      <div class="row-top">
+        <div>
+          <div class="name" style="font-size:19px;">${FD.escapeHtml(watch.name)}</div>
+          <div class="route">${legs}</div>
+        </div>
+      </div>
+      <span class="status-pill">${FD.statusLabel(status)}</span>
+      <div class="link-row" id="booking-links"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-label" style="margin-top:0;">Price</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <span id="price-flap"></span>
+        <span style="font-size:12px; color:var(--ink-2);">Target ${FD.formatMoney(watch.target_price, watch.currency)}</span>
+      </div>
+      <div style="font-size:12px; color:var(--ink-2); margin-top:6px;">Lowest seen: ${FD.formatMoney(watch.lowest_seen_price, watch.currency)}</div>
+    </div>
+
+    <div class="card">
+      <div class="section-label" style="margin-top:0;">Price history</div>
+      <div id="price-history"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-label" style="margin-top:0;">Notification log</div>
+      <div id="notif-log"></div>
+    </div>
+
+    ${watch.notes ? `<div class="card"><div class="section-label" style="margin-top:0;">Notes</div><p style="font-size:13px; color:var(--ink-1);">${FD.escapeHtml(watch.notes)}</p></div>` : ""}
+
+    <button class="btn btn-danger" id="deactivate">${watch.active ? "Deactivate this watch" : "Reactivate this watch"}</button>
+  `;
+
+  document.getElementById("price-flap").appendChild(FD.renderFlap(FD.formatMoney(watch.last_seen_price, watch.currency)));
+
+  const linksEl = document.getElementById("booking-links");
+  bookingLinks(watch).forEach((l) => {
+    const a = document.createElement("a");
+    a.href = l.url; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = l.label;
+    linksEl.appendChild(a);
+  });
+
+  const history = document.getElementById("price-history");
+  const events = (watch.priceEvents || []).filter((e) => e.extracted_price != null);
+  history.innerHTML = events.length
+    ? events.map((e) => `
+        <div class="event-row">
+          <span>${FD.formatMoney(e.extracted_price, e.currency || watch.currency)}</span>
+          <span class="meta">${new Date(e.received_at).toLocaleString()}${e.match_method === "manual" ? '<span class="badge">manual</span>' : ""}</span>
+        </div>`).join("")
+    : `<p style="font-size:13px; color:var(--ink-2);">No price emails matched yet.</p>`;
+
+  const log = document.getElementById("notif-log");
+  const notifs = watch.notifications || [];
+  log.innerHTML = notifs.length
+    ? notifs.map((n) => `
+        <div class="event-row">
+          <span>${FD.escapeHtml(n.message)}</span>
+          <span class="meta">${new Date(n.sent_at).toLocaleString()} ${n.success ? "" : "· failed"}</span>
+        </div>`).join("")
+    : `<p style="font-size:13px; color:var(--ink-2);">No notifications sent yet.</p>`;
+
+  document.getElementById("deactivate").addEventListener("click", async () => {
+    try {
+      await FD.api(`/api/watch/${watch.id}`, { method: "PATCH", body: JSON.stringify({ active: !watch.active }) });
+      FD.toast(watch.active ? "Watch deactivated" : "Watch reactivated", "success");
+      load();
+    } catch (err) {
+      FD.toast(err.message, "error");
+    }
+  });
+}
+
+load();
+</script>
+</body>
+</html>

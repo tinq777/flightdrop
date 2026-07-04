@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0B1220" />
+<title>FlightDrop — Test Tools</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="wordmark"><a href="/settings.html" style="color:var(--amber)">← Settings</a></div>
+    <div class="subline">Test tools</div>
+  </div>
+</header>
+
+<main>
+  <div class="section-label" style="margin-top:0;">Test email parser</div>
+  <div class="card">
+    <p style="font-size:12px; color:var(--ink-2); margin-top:0;">Paste a Google Flights alert subject + body. This runs it through the real parser and matcher, and stores it as a price event exactly like a live email would.</p>
+    <div class="field">
+      <label for="subject">Subject</label>
+      <input type="text" id="subject" value="Price drop for your tracked flight" />
+    </div>
+    <div class="field">
+      <label for="body">Body</label>
+      <textarea id="body" style="min-height:140px;">Good news! Your tracked flight to Madrid dropped to A$4,176.70. Google Flights - SYD to MAD, round trip.</textarea>
+    </div>
+    <button class="btn btn-primary" id="run-parser">Run parser</button>
+    <div id="parser-result"></div>
+  </div>
+
+  <div class="section-label">Manual price entry</div>
+  <div class="card">
+    <p style="font-size:12px; color:var(--ink-2); margin-top:0;">Skip email entirely and post a price straight to a watch — useful for testing notification rules.</p>
+    <div class="field">
+      <label for="watchSelect">Watch</label>
+      <select id="watchSelect"></select>
+    </div>
+    <div class="field">
+      <label for="manualPrice">Price</label>
+      <input type="number" id="manualPrice" placeholder="3990" />
+    </div>
+    <button class="btn btn-secondary" id="run-manual">Submit price</button>
+    <div id="manual-result"></div>
+  </div>
+</main>
+
+<nav class="bottom-nav">
+  <a href="/index.html" data-page="index.html"><span class="icon">▣</span>Dashboard</a>
+  <a href="/add.html" data-page="add.html"><span class="icon">＋</span>Add Watch</a>
+  <a href="/settings.html" data-page="settings.html"><span class="icon">⚙</span>Settings</a>
+</nav>
+
+<script src="/app.js"></script>
+<script>
+document.getElementById("run-parser").addEventListener("click", async () => {
+  const resultEl = document.getElementById("parser-result");
+  resultEl.innerHTML = `<p style="font-size:12px; color:var(--ink-2);">Running…</p>`;
+  try {
+    const result = await FD.api("/api/email/inbound", {
+      method: "POST",
+      body: JSON.stringify({
+        subject: document.getElementById("subject").value,
+        text: document.getElementById("body").value,
+      }),
+    });
+    resultEl.innerHTML = `<pre style="white-space:pre-wrap; font-size:11px; background:var(--panel-800); padding:10px; border-radius:6px; margin-top:10px;">${FD.escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
+    FD.toast(result.matched ? `Matched: ${result.watch?.name}` : "No watch matched — saved as unmatched", result.matched ? "success" : "");
+  } catch (err) {
+    resultEl.innerHTML = `<p style="font-size:12px; color:var(--coral);">${FD.escapeHtml(err.message)}</p>`;
+  }
+});
+
+async function loadWatchOptions() {
+  const select = document.getElementById("watchSelect");
+  if (!FD.apiBase()) { select.innerHTML = `<option>Connect API in Settings first</option>`; return; }
+  try {
+    const watches = await FD.api("/api/watches");
+    select.innerHTML = (watches || []).map((w) => `<option value="${FD.escapeHtml(w.id)}" data-currency="${FD.escapeHtml(w.currency)}">${FD.escapeHtml(w.name)}</option>`).join("") || `<option>No watches yet</option>`;
+  } catch (err) {
+    select.innerHTML = `<option>${FD.escapeHtml(err.message)}</option>`;
+  }
+}
+
+document.getElementById("run-manual").addEventListener("click", async () => {
+  const resultEl = document.getElementById("manual-result");
+  const select = document.getElementById("watchSelect");
+  const watchId = select.value;
+  const price = Number(document.getElementById("manualPrice").value);
+  if (!watchId || !price) { FD.toast("Pick a watch and enter a price", "error"); return; }
+
+  try {
+    const result = await FD.api("/api/price-event/manual-test", {
+      method: "POST",
+      body: JSON.stringify({ watchId, price }),
+    });
+    resultEl.innerHTML = `<pre style="white-space:pre-wrap; font-size:11px; background:var(--panel-800); padding:10px; border-radius:6px; margin-top:10px;">${FD.escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
+    FD.toast(result.notified ? "Notification triggered" : "Saved, no notification needed", result.notified ? "success" : "");
+  } catch (err) {
+    resultEl.innerHTML = `<p style="font-size:12px; color:var(--coral);">${FD.escapeHtml(err.message)}</p>`;
+  }
+});
+
+loadWatchOptions();
+</script>
+</body>
+</html>

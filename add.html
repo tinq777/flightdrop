@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0B1220" />
+<title>FlightDrop — Add Watch</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="wordmark">Add <span>Watch</span></div>
+    <div class="subline">One card per fare you're tracking</div>
+  </div>
+</header>
+
+<main>
+  <form id="watch-form">
+    <div class="field">
+      <label for="name">Alert name</label>
+      <input type="text" id="name" placeholder="Madrid in October" required />
+    </div>
+
+    <div class="field">
+      <label for="routeType">Route type</label>
+      <select id="routeType">
+        <option value="one-way">One-way</option>
+        <option value="return" selected>Return</option>
+        <option value="multi-city">Multi-city</option>
+      </select>
+    </div>
+
+    <div class="section-label">Legs</div>
+    <div id="legs"></div>
+    <button type="button" class="btn btn-ghost btn-sm" id="add-leg">+ Add leg</button>
+
+    <div class="section-label" style="margin-top:24px;">Pricing</div>
+    <div class="field">
+      <label for="targetPrice">Target price</label>
+      <input type="number" id="targetPrice" placeholder="4000" min="0" step="1" />
+    </div>
+    <div class="field">
+      <label for="currency">Currency</label>
+      <select id="currency">
+        <option value="USD" selected>USD ($)</option>
+        <option value="AUD">AUD (A$)</option>
+        <option value="GBP">GBP (£)</option>
+        <option value="EUR">EUR (€)</option>
+        <option value="NZD">NZD (NZ$)</option>
+        <option value="CAD">CAD (C$)</option>
+        <option value="JPY">JPY (¥)</option>
+      </select>
+    </div>
+
+    <div class="section-label" style="margin-top:24px;">Notes</div>
+    <div class="field">
+      <label for="source">Google Flights alert status</label>
+      <input type="text" id="source" placeholder="Set in Google Flights on Jul 3" />
+    </div>
+    <div class="field">
+      <label for="notes">Passenger / booking notes</label>
+      <textarea id="notes" placeholder="2 adults, prefer nonstop, check Trip.com too"></textarea>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save watch</button>
+  </form>
+</main>
+
+<nav class="bottom-nav">
+  <a href="/index.html" data-page="index.html"><span class="icon">▣</span>Dashboard</a>
+  <a href="/add.html" data-page="add.html"><span class="icon">＋</span>Add Watch</a>
+  <a href="/settings.html" data-page="settings.html"><span class="icon">⚙</span>Settings</a>
+</nav>
+
+<script src="/app.js"></script>
+<script>
+const legsContainer = document.getElementById("legs");
+
+function addLegRow(from = "", to = "", date = "") {
+  const row = document.createElement("div");
+  row.className = "leg-row";
+  row.innerHTML = `
+    <input type="text" placeholder="From (e.g. SYD)" class="leg-from" value="${FD.escapeHtml(from)}" />
+    <input type="text" placeholder="To (e.g. MAD)" class="leg-to" value="${FD.escapeHtml(to)}" />
+    <button type="button" class="btn btn-ghost btn-sm remove-leg" aria-label="Remove leg">✕</button>
+  `;
+  row.querySelector(".remove-leg").addEventListener("click", () => row.remove());
+  legsContainer.appendChild(row);
+}
+
+document.getElementById("add-leg").addEventListener("click", () => addLegRow());
+addLegRow(); // start with one leg
+
+document.getElementById("watch-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const legs = [...legsContainer.querySelectorAll(".leg-row")].map((row) => ({
+    from: row.querySelector(".leg-from").value.trim().toUpperCase(),
+    to: row.querySelector(".leg-to").value.trim().toUpperCase(),
+  })).filter((l) => l.from || l.to);
+
+  const payload = {
+    name: document.getElementById("name").value.trim(),
+    routeType: document.getElementById("routeType").value,
+    legs,
+    targetPrice: document.getElementById("targetPrice").value ? Number(document.getElementById("targetPrice").value) : null,
+    currency: document.getElementById("currency").value,
+    source: document.getElementById("source").value.trim(),
+    notes: document.getElementById("notes").value.trim(),
+  };
+
+  try {
+    const watch = await FD.api("/api/watch/create", { method: "POST", body: JSON.stringify(payload) });
+    FD.toast("Watch saved", "success");
+    location.href = `/watch.html?id=${watch.id}`;
+  } catch (err) {
+    FD.toast(err.message, "error");
+  }
+});
+</script>
+</body>
+</html>
