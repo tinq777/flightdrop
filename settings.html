@@ -34,6 +34,8 @@
     <button class="btn btn-secondary" id="enable-push">Enable push notifications</button>
     <div style="height:10px;"></div>
     <button class="btn btn-ghost" id="test-push">Send test notification</button>
+    <div style="height:10px;"></div>
+    <button class="btn btn-ghost btn-sm" id="refresh-firebase-config">Refresh Firebase config (fixes a stale/bad key)</button>
     <p id="push-fallback" style="font-size:12px; color:var(--coral); margin-bottom:0; display:none;">
       Push didn't go through. As a fallback, check the Dashboard directly, or set up an email-to-SMS / IFTTT alert from your Gmail filter as a backup channel.
     </p>
@@ -79,9 +81,15 @@ document.getElementById("inbound-url").textContent = FD.apiBase() ? `${FD.apiBas
 
 document.getElementById("save-api").addEventListener("click", () => {
   FD.setApiBase(apiInput.value.trim().replace(/\/$/, ""));
+  localStorage.removeItem("fd_firebase_config"); // force a fresh fetch next time push is enabled
   FD.toast("Saved", "success");
   document.getElementById("inbound-url").textContent = `${FD.apiBase()}/api/email/inbound`;
   loadUnmatched();
+});
+
+document.getElementById("refresh-firebase-config")?.addEventListener("click", () => {
+  localStorage.removeItem("fd_firebase_config");
+  FD.toast("Cleared. Tap Enable push notifications again to re-fetch it.", "success");
 });
 
 document.getElementById("enable-push").addEventListener("click", async () => {
