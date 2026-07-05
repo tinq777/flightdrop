@@ -36,6 +36,7 @@
     </div>
 
     <div class="section-label">Legs</div>
+    <p style="font-size:12px; color:var(--ink-2); margin:-6px 0 10px;">Date is optional - only needed if you're tracking the same route for more than one trip, so FlightDrop can tell them apart.</p>
     <div id="legs"></div>
     <button type="button" class="btn btn-ghost btn-sm" id="add-leg">+ Add leg</button>
 
@@ -81,21 +82,26 @@
 <script>
 const legsContainer = document.getElementById("legs");
 
-function addLegRow(fromCode = "", fromCity = "", toCode = "", toCity = "") {
+function addLegRow(fromCode = "", fromCity = "", toCode = "", toCity = "", date = "") {
   const row = document.createElement("div");
   row.className = "leg-row";
   row.innerHTML = `
-    <div class="airport-picker">
-      <input type="text" placeholder="From (city or code)" class="leg-from" autocomplete="off"
-        value="${fromCity ? FD.escapeHtml(`${fromCity} (${fromCode})`) : ""}"
-        data-code="${FD.escapeHtml(fromCode)}" />
+    <div class="leg-row-airports">
+      <div class="airport-picker">
+        <input type="text" placeholder="From (city or code)" class="leg-from" autocomplete="off"
+          value="${fromCity ? FD.escapeHtml(`${fromCity} (${fromCode})`) : ""}"
+          data-code="${FD.escapeHtml(fromCode)}" />
+      </div>
+      <div class="airport-picker">
+        <input type="text" placeholder="To (city or code)" class="leg-to" autocomplete="off"
+          value="${toCity ? FD.escapeHtml(`${toCity} (${toCode})`) : ""}"
+          data-code="${FD.escapeHtml(toCode)}" />
+      </div>
     </div>
-    <div class="airport-picker">
-      <input type="text" placeholder="To (city or code)" class="leg-to" autocomplete="off"
-        value="${toCity ? FD.escapeHtml(`${toCity} (${toCode})`) : ""}"
-        data-code="${FD.escapeHtml(toCode)}" />
+    <div class="leg-row-date-remove">
+      <input type="date" class="leg-date" value="${FD.escapeHtml(date)}" aria-label="Departure date (optional)" />
+      <button type="button" class="btn btn-ghost btn-sm remove-leg" aria-label="Remove leg">✕</button>
     </div>
-    <button type="button" class="btn btn-ghost btn-sm remove-leg" aria-label="Remove leg">✕</button>
   `;
   row.querySelector(".remove-leg").addEventListener("click", () => row.remove());
   FD.initAirportPicker(row.querySelector(".leg-from"));
@@ -111,6 +117,7 @@ document.getElementById("watch-form").addEventListener("submit", async (e) => {
   const legs = [...legsContainer.querySelectorAll(".leg-row")].map((row) => ({
     from: row.querySelector(".leg-from").dataset.code || "",
     to: row.querySelector(".leg-to").dataset.code || "",
+    date: row.querySelector(".leg-date").value || null,
   })).filter((l) => l.from || l.to);
 
   const payload = {

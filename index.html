@@ -95,7 +95,11 @@ function renderWatchCard(watch) {
   a.className = "card watch-card";
   a.dataset.status = status;
 
-  const legs = (watch.legs || []).map((l) => `${FD.escapeHtml(l.from) || "?"} → ${FD.escapeHtml(l.to) || "?"}`).join(" · ") || FD.escapeHtml(watch.route_type);
+  const legs = (watch.legs || []).map((l) => {
+    const route = `${FD.escapeHtml(l.from) || "?"} → ${FD.escapeHtml(l.to) || "?"}`;
+    const dateLabel = FD.formatShortDate(l.date);
+    return dateLabel ? `${route} (${dateLabel})` : route;
+  }).join(" · ") || FD.escapeHtml(watch.route_type);
 
   const priceBlock = document.createElement("div");
   priceBlock.className = "price-block";

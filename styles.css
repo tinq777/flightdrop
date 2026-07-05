@@ -276,11 +276,33 @@ main {
 .field textarea { min-height: 70px; resize: vertical; }
 
 .leg-row {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.leg-row-airports {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 8px;
-  align-items: start;
+}
+
+.leg-row-date-remove {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.leg-row-date-remove input[type="date"] {
+  flex: 1;
+  background: var(--panel-800);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  color: var(--ink-0);
+  padding: 11px 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
 }
 
 .leg-row input { width: 100%; }

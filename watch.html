@@ -64,7 +64,11 @@ async function load() {
 
 function render(watch) {
   const status = FD.watchStatus(watch);
-  const legs = (watch.legs || []).map((l) => `${FD.escapeHtml(l.from) || "?"} → ${FD.escapeHtml(l.to) || "?"}`).join(" · ") || FD.escapeHtml(watch.route_type);
+  const legs = (watch.legs || []).map((l) => {
+    const route = `${FD.escapeHtml(l.from) || "?"} → ${FD.escapeHtml(l.to) || "?"}`;
+    const dateLabel = FD.formatShortDate(l.date);
+    return dateLabel ? `${route} (${dateLabel})` : route;
+  }).join(" · ") || FD.escapeHtml(watch.route_type);
 
   content.innerHTML = `
     <div class="card watch-card" data-status="${status}">
@@ -222,23 +226,28 @@ function renderEditForm(watch) {
 
   const editLegsContainer = document.getElementById("edit-legs");
 
-  function addEditLegRow(fromCode = "", toCode = "") {
+  function addEditLegRow(fromCode = "", toCode = "", date = "") {
     const row = document.createElement("div");
     row.className = "leg-row";
     const fromCity = codeToCity(fromCode);
     const toCity = codeToCity(toCode);
     row.innerHTML = `
-      <div class="airport-picker">
-        <input type="text" placeholder="From (city or code)" class="leg-from" autocomplete="off"
-          value="${fromCity ? FD.escapeHtml(`${fromCity} (${fromCode})`) : FD.escapeHtml(fromCode)}"
-          data-code="${FD.escapeHtml(fromCode)}" />
+      <div class="leg-row-airports">
+        <div class="airport-picker">
+          <input type="text" placeholder="From (city or code)" class="leg-from" autocomplete="off"
+            value="${fromCity ? FD.escapeHtml(`${fromCity} (${fromCode})`) : FD.escapeHtml(fromCode)}"
+            data-code="${FD.escapeHtml(fromCode)}" />
+        </div>
+        <div class="airport-picker">
+          <input type="text" placeholder="To (city or code)" class="leg-to" autocomplete="off"
+            value="${toCity ? FD.escapeHtml(`${toCity} (${toCode})`) : FD.escapeHtml(toCode)}"
+            data-code="${FD.escapeHtml(toCode)}" />
+        </div>
       </div>
-      <div class="airport-picker">
-        <input type="text" placeholder="To (city or code)" class="leg-to" autocomplete="off"
-          value="${toCity ? FD.escapeHtml(`${toCity} (${toCode})`) : FD.escapeHtml(toCode)}"
-          data-code="${FD.escapeHtml(toCode)}" />
+      <div class="leg-row-date-remove">
+        <input type="date" class="leg-date" value="${FD.escapeHtml(date)}" aria-label="Departure date (optional)" />
+        <button type="button" class="btn btn-ghost btn-sm remove-leg" aria-label="Remove leg">✕</button>
       </div>
-      <button type="button" class="btn btn-ghost btn-sm remove-leg" aria-label="Remove leg">✕</button>
     `;
     row.querySelector(".remove-leg").addEventListener("click", () => row.remove());
     FD.initAirportPicker(row.querySelector(".leg-from"));
@@ -247,7 +256,7 @@ function renderEditForm(watch) {
   }
 
   const existingLegs = watch.legs && watch.legs.length ? watch.legs : [{ from: "", to: "" }];
-  existingLegs.forEach((l) => addEditLegRow(l.from || "", l.to || ""));
+  existingLegs.forEach((l) => addEditLegRow(l.from || "", l.to || "", l.date || ""));
 
   document.getElementById("edit-add-leg").addEventListener("click", () => addEditLegRow());
   document.getElementById("cancel-edit").addEventListener("click", () => render(watch));
@@ -257,6 +266,7 @@ function renderEditForm(watch) {
     const legs = [...editLegsContainer.querySelectorAll(".leg-row")].map((row) => ({
       from: row.querySelector(".leg-from").dataset.code || "",
       to: row.querySelector(".leg-to").dataset.code || "",
+      date: row.querySelector(".leg-date").value || null,
     })).filter((l) => l.from || l.to);
 
     const patch = {

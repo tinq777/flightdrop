@@ -181,6 +181,13 @@ const FD = (() => {
     return `${symbol}${formatted}`;
   }
 
+  function formatShortDate(iso) {
+    if (!iso) return "";
+    const d = new Date(`${iso}T00:00:00`);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
   function watchStatus(watch) {
     if (watch.last_seen_price == null) return "unchanged";
     if (watch.target_price != null && watch.last_seen_price <= watch.target_price) return "below-target";
@@ -229,6 +236,7 @@ const FD = (() => {
     pushSupported,
     registerServiceWorker,
     formatMoney,
+    formatShortDate,
     watchStatus,
     statusLabel,
     renderFlap,
