@@ -35,6 +35,70 @@ const FD = (() => {
       .replace(/'/g, "&#39;");
   }
 
+  // Wires a text input up to a searchable dropdown of known airports (see
+  // airports.js). Selecting a suggestion stores the 3-letter code on
+  // input.dataset.code and displays "City (CODE)"; typing without picking
+  // one clears dataset.code, and losing focus without a valid selection
+  // resets the field - this forces the user to actually pick a recognized
+  // airport rather than typing free text the parser might not match later.
+  function initAirportPicker(input) {
+    const wrapper = input.closest(".airport-picker") || input.parentElement;
+    let dropdown = wrapper.querySelector(".airport-suggestions");
+    if (!dropdown) {
+      dropdown = document.createElement("div");
+      dropdown.className = "airport-suggestions";
+      dropdown.hidden = true;
+      wrapper.appendChild(dropdown);
+    }
+
+    function renderSuggestions(query) {
+      const airports = window.FLIGHTDROP_AIRPORTS || [];
+      const q = query.trim().toLowerCase();
+      const matches = q
+        ? airports.filter((a) => a.city.toLowerCase().includes(q) || a.code.toLowerCase().includes(q)).slice(0, 8)
+        : airports.slice(0, 8);
+
+      dropdown.innerHTML = "";
+      if (matches.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "airport-suggestions-empty";
+        empty.textContent = "No matching airports - try a different city or code.";
+        dropdown.appendChild(empty);
+        dropdown.hidden = false;
+        return;
+      }
+
+      matches.forEach((a) => {
+        const item = document.createElement("div");
+        item.className = "airport-suggestion-item";
+        item.innerHTML = `${escapeHtml(a.city)}<span class="code">${escapeHtml(a.code)}</span>`;
+        // mousedown (not click) fires before the input's blur, so we can
+        // preventDefault() to keep focus and commit the selection cleanly -
+        // this also works for touch taps on iOS Safari.
+        item.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          input.value = `${a.city} (${a.code})`;
+          input.dataset.code = a.code;
+          dropdown.hidden = true;
+        });
+        dropdown.appendChild(item);
+      });
+      dropdown.hidden = false;
+    }
+
+    input.addEventListener("focus", () => renderSuggestions(input.value));
+    input.addEventListener("input", () => {
+      input.dataset.code = "";
+      renderSuggestions(input.value);
+    });
+    input.addEventListener("blur", () => {
+      setTimeout(() => {
+        dropdown.hidden = true;
+        if (!input.dataset.code) input.value = "";
+      }, 200);
+    });
+  }
+
   function toast(message, kind = "") {
     let el = document.getElementById("fd-toast");
     if (!el) {
@@ -159,6 +223,7 @@ const FD = (() => {
     setApiBase,
     toast,
     escapeHtml,
+    initAirportPicker,
     enablePush,
     isPushEnabled,
     pushSupported,

@@ -280,10 +280,53 @@ main {
   grid-template-columns: 1fr 1fr auto;
   gap: 8px;
   margin-bottom: 8px;
-  align-items: center;
+  align-items: start;
 }
 
 .leg-row input { width: 100%; }
+
+.airport-picker {
+  position: relative;
+}
+
+.airport-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--panel-800);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.airport-suggestion-item {
+  padding: 11px 12px;
+  font-size: 14px;
+  color: var(--ink-0);
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+}
+
+.airport-suggestion-item:last-child { border-bottom: none; }
+.airport-suggestion-item:active,
+.airport-suggestion-item.highlighted { background: var(--panel-900); }
+
+.airport-suggestion-item .code {
+  color: var(--amber);
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+.airport-suggestions-empty {
+  padding: 11px 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
 
 .btn {
   display: inline-flex;

@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <link rel="stylesheet" href="/styles.css" />
+<script src="/airports.js"></script>
 </head>
 <body>
 <header class="topbar">
@@ -80,15 +81,25 @@
 <script>
 const legsContainer = document.getElementById("legs");
 
-function addLegRow(from = "", to = "", date = "") {
+function addLegRow(fromCode = "", fromCity = "", toCode = "", toCity = "") {
   const row = document.createElement("div");
   row.className = "leg-row";
   row.innerHTML = `
-    <input type="text" placeholder="From (e.g. SYD)" class="leg-from" value="${FD.escapeHtml(from)}" />
-    <input type="text" placeholder="To (e.g. MAD)" class="leg-to" value="${FD.escapeHtml(to)}" />
+    <div class="airport-picker">
+      <input type="text" placeholder="From (city or code)" class="leg-from" autocomplete="off"
+        value="${fromCity ? FD.escapeHtml(`${fromCity} (${fromCode})`) : ""}"
+        data-code="${FD.escapeHtml(fromCode)}" />
+    </div>
+    <div class="airport-picker">
+      <input type="text" placeholder="To (city or code)" class="leg-to" autocomplete="off"
+        value="${toCity ? FD.escapeHtml(`${toCity} (${toCode})`) : ""}"
+        data-code="${FD.escapeHtml(toCode)}" />
+    </div>
     <button type="button" class="btn btn-ghost btn-sm remove-leg" aria-label="Remove leg">✕</button>
   `;
   row.querySelector(".remove-leg").addEventListener("click", () => row.remove());
+  FD.initAirportPicker(row.querySelector(".leg-from"));
+  FD.initAirportPicker(row.querySelector(".leg-to"));
   legsContainer.appendChild(row);
 }
 
@@ -98,8 +109,8 @@ addLegRow(); // start with one leg
 document.getElementById("watch-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const legs = [...legsContainer.querySelectorAll(".leg-row")].map((row) => ({
-    from: row.querySelector(".leg-from").value.trim().toUpperCase(),
-    to: row.querySelector(".leg-to").value.trim().toUpperCase(),
+    from: row.querySelector(".leg-from").dataset.code || "",
+    to: row.querySelector(".leg-to").dataset.code || "",
   })).filter((l) => l.from || l.to);
 
   const payload = {
