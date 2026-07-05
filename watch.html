@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <link rel="stylesheet" href="/styles.css" />
+<script src="/airports.js"></script>
 </head>
 <body>
 <header class="topbar">
@@ -41,6 +42,11 @@ function bookingLinks(watch) {
     { label: "Trip.com", url: `https://www.trip.com/flights/` },
     { label: "Booking.com", url: `https://www.booking.com/flights/` },
   ];
+}
+
+function codeToCity(code) {
+  const match = (window.FLIGHTDROP_AIRPORTS || []).find((a) => a.code === code);
+  return match ? match.city : "";
 }
 
 async function load() {
@@ -93,7 +99,11 @@ function render(watch) {
 
     ${watch.notes ? `<div class="card"><div class="section-label" style="margin-top:0;">Notes</div><p style="font-size:13px; color:var(--ink-1);">${FD.escapeHtml(watch.notes)}</p></div>` : ""}
 
+    <button class="btn btn-secondary" id="edit-watch">Edit this watch</button>
+    <div style="height:10px;"></div>
     <button class="btn btn-danger" id="deactivate">${watch.active ? "Deactivate this watch" : "Reactivate this watch"}</button>
+    <div style="height:10px;"></div>
+    <button class="btn btn-danger" id="delete-watch">Delete this watch</button>
   `;
 
   document.getElementById("price-flap").appendChild(FD.renderFlap(FD.formatMoney(watch.last_seen_price, watch.currency)));
@@ -126,10 +136,142 @@ function render(watch) {
         </div>`).join("")
     : `<p style="font-size:13px; color:var(--ink-2);">No notifications sent yet.</p>`;
 
+  document.getElementById("edit-watch").addEventListener("click", () => renderEditForm(watch));
+
   document.getElementById("deactivate").addEventListener("click", async () => {
     try {
       await FD.api(`/api/watch/${watch.id}`, { method: "PATCH", body: JSON.stringify({ active: !watch.active }) });
       FD.toast(watch.active ? "Watch deactivated" : "Watch reactivated", "success");
+      load();
+    } catch (err) {
+      FD.toast(err.message, "error");
+    }
+  });
+
+  document.getElementById("delete-watch").addEventListener("click", async () => {
+    const confirmed = confirm(`Delete "${watch.name}"? This can't be undone - price history and notification logs for this watch will no longer be reachable from the dashboard.`);
+    if (!confirmed) return;
+    try {
+      await FD.api(`/api/watch/${watch.id}`, { method: "DELETE" });
+      FD.toast("Watch deleted", "success");
+      location.href = "/index.html";
+    } catch (err) {
+      FD.toast(err.message, "error");
+    }
+  });
+}
+
+function renderEditForm(watch) {
+  content.innerHTML = `
+    <form id="edit-form">
+      <div class="section-label" style="margin-top:0;">Edit watch</div>
+      <div class="field">
+        <label for="edit-name">Alert name</label>
+        <input type="text" id="edit-name" value="${FD.escapeHtml(watch.name)}" required />
+      </div>
+
+      <div class="field">
+        <label for="edit-routeType">Route type</label>
+        <select id="edit-routeType">
+          <option value="one-way">One-way</option>
+          <option value="return">Return</option>
+          <option value="multi-city">Multi-city</option>
+        </select>
+      </div>
+
+      <div class="section-label">Legs</div>
+      <div id="edit-legs"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="edit-add-leg">+ Add leg</button>
+
+      <div class="section-label" style="margin-top:24px;">Pricing</div>
+      <div class="field">
+        <label for="edit-targetPrice">Target price</label>
+        <input type="number" id="edit-targetPrice" value="${watch.target_price ?? ""}" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="edit-currency">Currency</label>
+        <select id="edit-currency">
+          <option value="AUD">AUD (A$)</option>
+          <option value="USD">USD ($)</option>
+          <option value="GBP">GBP (£)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="NZD">NZD (NZ$)</option>
+          <option value="CAD">CAD (C$)</option>
+          <option value="JPY">JPY (¥)</option>
+        </select>
+      </div>
+
+      <div class="section-label" style="margin-top:24px;">Notes</div>
+      <div class="field">
+        <label for="edit-source">Google Flights alert status</label>
+        <input type="text" id="edit-source" value="${FD.escapeHtml(watch.source || "")}" />
+      </div>
+      <div class="field">
+        <label for="edit-notes">Passenger / booking notes</label>
+        <textarea id="edit-notes">${FD.escapeHtml(watch.notes || "")}</textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Save changes</button>
+      <div style="height:10px;"></div>
+      <button type="button" class="btn btn-ghost" id="cancel-edit">Cancel</button>
+    </form>
+  `;
+
+  document.getElementById("edit-routeType").value = watch.route_type || "return";
+  document.getElementById("edit-currency").value = watch.currency || "AUD";
+
+  const editLegsContainer = document.getElementById("edit-legs");
+
+  function addEditLegRow(fromCode = "", toCode = "") {
+    const row = document.createElement("div");
+    row.className = "leg-row";
+    const fromCity = codeToCity(fromCode);
+    const toCity = codeToCity(toCode);
+    row.innerHTML = `
+      <div class="airport-picker">
+        <input type="text" placeholder="From (city or code)" class="leg-from" autocomplete="off"
+          value="${fromCity ? FD.escapeHtml(`${fromCity} (${fromCode})`) : FD.escapeHtml(fromCode)}"
+          data-code="${FD.escapeHtml(fromCode)}" />
+      </div>
+      <div class="airport-picker">
+        <input type="text" placeholder="To (city or code)" class="leg-to" autocomplete="off"
+          value="${toCity ? FD.escapeHtml(`${toCity} (${toCode})`) : FD.escapeHtml(toCode)}"
+          data-code="${FD.escapeHtml(toCode)}" />
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm remove-leg" aria-label="Remove leg">✕</button>
+    `;
+    row.querySelector(".remove-leg").addEventListener("click", () => row.remove());
+    FD.initAirportPicker(row.querySelector(".leg-from"));
+    FD.initAirportPicker(row.querySelector(".leg-to"));
+    editLegsContainer.appendChild(row);
+  }
+
+  const existingLegs = watch.legs && watch.legs.length ? watch.legs : [{ from: "", to: "" }];
+  existingLegs.forEach((l) => addEditLegRow(l.from || "", l.to || ""));
+
+  document.getElementById("edit-add-leg").addEventListener("click", () => addEditLegRow());
+  document.getElementById("cancel-edit").addEventListener("click", () => render(watch));
+
+  document.getElementById("edit-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const legs = [...editLegsContainer.querySelectorAll(".leg-row")].map((row) => ({
+      from: row.querySelector(".leg-from").dataset.code || "",
+      to: row.querySelector(".leg-to").dataset.code || "",
+    })).filter((l) => l.from || l.to);
+
+    const patch = {
+      name: document.getElementById("edit-name").value.trim(),
+      route_type: document.getElementById("edit-routeType").value,
+      legs,
+      target_price: document.getElementById("edit-targetPrice").value ? Number(document.getElementById("edit-targetPrice").value) : null,
+      currency: document.getElementById("edit-currency").value,
+      source: document.getElementById("edit-source").value.trim(),
+      notes: document.getElementById("edit-notes").value.trim(),
+    };
+
+    try {
+      await FD.api(`/api/watch/${watch.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+      FD.toast("Watch updated", "success");
       load();
     } catch (err) {
       FD.toast(err.message, "error");
