@@ -4,6 +4,19 @@
 // absolute URL (e.g. https://flightdrop-worker.yourname.workers.dev).
 window.FLIGHTDROP_API_BASE = window.FLIGHTDROP_API_BASE || localStorage.getItem("fd_api_base") || "";
 
+// The set of services shown as checkboxes on Add/Edit Watch, so the person
+// can track which platforms they've actually set up price alerts on for a
+// given route. This is a personal checklist only - it doesn't affect
+// matching. FlightDrop's parser currently only actively recognizes Google
+// Flights and Skyscanner alert emails; Trip.com/Booking.com are listed for
+// tracking purposes even though their alerts aren't parsed yet.
+window.FLIGHTDROP_PLATFORMS = [
+  { key: "google_flights", label: "Google Flights" },
+  { key: "skyscanner", label: "Skyscanner" },
+  { key: "trip_com", label: "Trip.com" },
+  { key: "booking_com", label: "Booking.com" },
+];
+
 const FD = (() => {
   function apiBase() {
     return window.FLIGHTDROP_API_BASE || "";
@@ -181,6 +194,18 @@ const FD = (() => {
     return `${symbol}${formatted}`;
   }
 
+  function getDefaultPassengers() {
+    const saved = localStorage.getItem("fd_default_passengers");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* fall through to default */ }
+    }
+    return { adults: 1, children: 0 };
+  }
+
+  function setDefaultPassengers(passengers) {
+    localStorage.setItem("fd_default_passengers", JSON.stringify(passengers));
+  }
+
   function formatShortDate(iso) {
     if (!iso) return "";
     const d = new Date(`${iso}T00:00:00`);
@@ -237,6 +262,8 @@ const FD = (() => {
     registerServiceWorker,
     formatMoney,
     formatShortDate,
+    getDefaultPassengers,
+    setDefaultPassengers,
     watchStatus,
     statusLabel,
     renderFlap,

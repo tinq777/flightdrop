@@ -79,6 +79,7 @@ function render(watch) {
         </div>
       </div>
       <span class="status-pill">${FD.statusLabel(status)}</span>
+      <div class="platform-badges" id="platform-badges"></div>
       <div class="link-row" id="booking-links"></div>
     </div>
 
@@ -89,6 +90,11 @@ function render(watch) {
         <span style="font-size:12px; color:var(--ink-2);">Target ${FD.formatMoney(watch.target_price, watch.currency)}</span>
       </div>
       <div style="font-size:12px; color:var(--ink-2); margin-top:6px;">Lowest seen: ${FD.formatMoney(watch.lowest_seen_price, watch.currency)}</div>
+    </div>
+
+    <div class="card">
+      <div class="section-label" style="margin-top:0;">AI price suggestion</div>
+      <div id="ai-suggestion-content"></div>
     </div>
 
     <div class="card">
@@ -112,6 +118,12 @@ function render(watch) {
 
   document.getElementById("price-flap").appendChild(FD.renderFlap(FD.formatMoney(watch.last_seen_price, watch.currency)));
 
+  const badgesEl = document.getElementById("platform-badges");
+  const platformLabels = (window.FLIGHTDROP_PLATFORMS || []).filter((p) => (watch.platforms || []).includes(p.key));
+  badgesEl.innerHTML = platformLabels.length
+    ? platformLabels.map((p) => `<span class="badge">${FD.escapeHtml(p.label)}</span>`).join("")
+    : "";
+
   const linksEl = document.getElementById("booking-links");
   bookingLinks(watch).forEach((l) => {
     const a = document.createElement("a");
@@ -119,6 +131,9 @@ function render(watch) {
     a.textContent = l.label;
     linksEl.appendChild(a);
   });
+
+  const aiEl = document.getElementById("ai-suggestion-content");
+  renderAiSuggestion(aiEl, watch);
 
   const history = document.getElementById("price-history");
   const events = (watch.priceEvents || []).filter((e) => e.extracted_price != null);
@@ -187,6 +202,18 @@ function renderEditForm(watch) {
       <div id="edit-legs"></div>
       <button type="button" class="btn btn-ghost btn-sm" id="edit-add-leg">+ Add leg</button>
 
+      <div class="section-label" style="margin-top:24px;">Passengers</div>
+      <div class="leg-row-airports" style="margin-bottom:0;">
+        <div class="field">
+          <label for="edit-adults">Adults</label>
+          <input type="number" id="edit-adults" value="${watch.adults ?? 1}" min="1" step="1" />
+        </div>
+        <div class="field">
+          <label for="edit-children">Children</label>
+          <input type="number" id="edit-children" value="${watch.children ?? 0}" min="0" step="1" />
+        </div>
+      </div>
+
       <div class="section-label" style="margin-top:24px;">Pricing</div>
       <div class="field">
         <label for="edit-targetPrice">Target price</label>
@@ -204,6 +231,9 @@ function renderEditForm(watch) {
           <option value="JPY">JPY (¥)</option>
         </select>
       </div>
+
+      <div class="section-label" style="margin-top:24px;">Alert platforms</div>
+      <div class="card" id="edit-platform-list"></div>
 
       <div class="section-label" style="margin-top:24px;">Notes</div>
       <div class="field">
@@ -223,6 +253,18 @@ function renderEditForm(watch) {
 
   document.getElementById("edit-routeType").value = watch.route_type || "return";
   document.getElementById("edit-currency").value = watch.currency || "AUD";
+
+  const editPlatformList = document.getElementById("edit-platform-list");
+  const editPlatformIds = [];
+  (window.FLIGHTDROP_PLATFORMS || []).forEach((p) => {
+    const id = `edit-platform-${p.key}`;
+    editPlatformIds.push({ id, key: p.key });
+    const row = document.createElement("label");
+    row.className = "checkbox-row";
+    const checked = (watch.platforms || []).includes(p.key) ? "checked" : "";
+    row.innerHTML = `<input type="checkbox" id="${id}" ${checked} /> ${FD.escapeHtml(p.label)}`;
+    editPlatformList.appendChild(row);
+  });
 
   const editLegsContainer = document.getElementById("edit-legs");
 
@@ -269,14 +311,21 @@ function renderEditForm(watch) {
       date: row.querySelector(".leg-date").value || null,
     })).filter((l) => l.from || l.to);
 
+    const platforms = editPlatformIds
+      .filter((p) => document.getElementById(p.id).checked)
+      .map((p) => p.key);
+
     const patch = {
       name: document.getElementById("edit-name").value.trim(),
       route_type: document.getElementById("edit-routeType").value,
       legs,
       target_price: document.getElementById("edit-targetPrice").value ? Number(document.getElementById("edit-targetPrice").value) : null,
       currency: document.getElementById("edit-currency").value,
+      adults: Math.max(1, Number(document.getElementById("edit-adults").value) || 1),
+      children: Math.max(0, Number(document.getElementById("edit-children").value) || 0),
       source: document.getElementById("edit-source").value.trim(),
       notes: document.getElementById("edit-notes").value.trim(),
+      platforms,
     };
 
     try {
@@ -285,6 +334,43 @@ function renderEditForm(watch) {
       load();
     } catch (err) {
       FD.toast(err.message, "error");
+    }
+  });
+}
+
+function formatAiText(text) {
+  // Escape first, then convert newlines to <br> - never trust LLM output any
+  // more than any other external text when inserting into innerHTML.
+  return FD.escapeHtml(text).replace(/\n/g, "<br>");
+}
+
+function renderAiSuggestion(container, watch) {
+  const updatedLabel = watch.ai_suggestion_updated_at
+    ? `Last generated ${new Date(watch.ai_suggestion_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+    : "";
+
+  container.innerHTML = `
+    ${watch.ai_suggestion
+      ? `<div style="font-size:13px; color:var(--ink-1); line-height:1.6; margin-bottom:12px;">${formatAiText(watch.ai_suggestion)}</div>`
+      : `<p style="font-size:13px; color:var(--ink-2); margin-top:0;">No suggestion yet - get a rough sense of what a good price looks like for this trip based on the route and your notes.</p>`
+    }
+    <button class="btn btn-ghost btn-sm" id="get-ai-suggestion">${watch.ai_suggestion ? "Refresh suggestion" : "Get AI price suggestion"}</button>
+    ${updatedLabel ? `<div style="font-size:11px; color:var(--ink-2); margin-top:6px;">${updatedLabel}</div>` : ""}
+  `;
+
+  document.getElementById("get-ai-suggestion").addEventListener("click", async (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    btn.textContent = "Thinking...";
+    try {
+      const result = await FD.api(`/api/watch/${watch.id}/suggest-price`, { method: "POST" });
+      watch.ai_suggestion = result.suggestion;
+      watch.ai_suggestion_updated_at = new Date().toISOString();
+      renderAiSuggestion(container, watch);
+    } catch (err) {
+      FD.toast(err.message, "error");
+      btn.disabled = false;
+      btn.textContent = watch.ai_suggestion ? "Refresh suggestion" : "Get AI price suggestion";
     }
   });
 }
