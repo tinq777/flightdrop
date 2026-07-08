@@ -80,6 +80,10 @@ function render(watch) {
       </div>
       <span class="status-pill">${FD.statusLabel(status)}</span>
       <div class="platform-badges" id="platform-badges"></div>
+      ${watch.last_flight_url
+        ? `<a href="${FD.escapeHtml(watch.last_flight_url)}" target="_blank" rel="noopener" class="btn btn-primary" style="margin-top:12px;">View this priced flight →</a>`
+        : `<p style="font-size:11px; color:var(--ink-2); margin-top:10px;">No direct flight link yet - one will show up here once an alert email includes one.</p>`
+      }
       <div class="link-row" id="booking-links"></div>
     </div>
 
@@ -140,7 +144,7 @@ function render(watch) {
   history.innerHTML = events.length
     ? events.map((e) => `
         <div class="event-row">
-          <span>${FD.formatMoney(e.extracted_price, e.currency || watch.currency)}</span>
+          <span>${FD.formatMoney(e.extracted_price, e.currency || watch.currency)}${e.flight_url ? ` <a href="${FD.escapeHtml(e.flight_url)}" target="_blank" rel="noopener" style="color:var(--amber); font-size:11px;">View →</a>` : ""}</span>
           <span class="meta">${new Date(e.received_at).toLocaleString()}${e.match_method === "manual" ? '<span class="badge">manual</span>' : ""}</span>
         </div>`).join("")
     : `<p style="font-size:13px; color:var(--ink-2);">No price emails matched yet.</p>`;
